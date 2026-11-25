@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-service
+  namespace: agentops-demo
+  labels:
+    app: demo-service
+  annotations:
+    kubernetes.io/change-cause: "initial release 1.0.0"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: demo-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: demo-service
+    spec:
+      containers:
+        - name: demo-service
+          image: agentops/demo-service:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - configMapRef:
+                name: demo-service-config
+          env:
+            - name: APP_VERSION
+              value: "1.0.0"
+            - name: BAD_RELEASE
+              value: "false"
+          readinessProbe:
+            httpGet: {path: /ready, port: 8001}
+            periodSeconds: 3
+            failureThreshold: 2
+          # Liveness is independent of simulated faults so kubelet never auto-heals a scenario.
+          livenessProbe:
+            httpGet: {path: /live, port: 8001}
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false

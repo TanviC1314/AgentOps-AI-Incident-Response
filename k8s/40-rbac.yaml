@@ -1,0 +1,46 @@
+# Identity used by the AgentOps recovery engine ("recovery controller").
+# Namespace-scoped Role only: no ClusterRole, no access to any other namespace, no secrets, no exec,
+# no create/delete of deployments. Verify with scripts/kind-setup.ps1 (kubectl auth can-i checks).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agentops-recovery
+  namespace: agentops-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agentops-recovery
+  namespace: agentops-demo
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]          # delete = restart (ReplicaSet recreates)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["demo-service"]
+    verbs: ["get", "patch"]                   # rollback / release patch, limited to the demo deployment
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    resourceNames: ["demo-service"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]                    # rollout history
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agentops-recovery
+  namespace: agentops-demo
+subjects:
+  - kind: ServiceAccount
+    name: agentops-recovery
+    namespace: agentops-demo
+roleRef:
+  kind: Role
+  name: agentops-recovery
+  apiGroup: rbac.authorization.k8s.io

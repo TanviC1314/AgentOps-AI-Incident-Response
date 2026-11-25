@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-service-config
+  namespace: agentops-demo
+data:
+  SERVICE_NAME: demo-service
+  SELF_TRAFFIC_RPS: "5"
+  ADMIN_TOKEN: local-admin-token   # demo-only; the simulation API is not exposed beyond localhost
