@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { @apply font-sans antialiased; }
+table { @apply w-full text-sm; }
+th { @apply text-left text-xs uppercase tracking-wide text-slate-400 font-medium px-3 py-2 border-b border-ink-600; }
+td { @apply px-3 py-2 border-b border-ink-700 align-top; }
