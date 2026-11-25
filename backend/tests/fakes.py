@@ -121,11 +121,11 @@ def prom_transport(values: dict[str, float | None] | None = None, versions=("2.0
         q = request.url.params.get("query", "")
         if "demo_service_build_info" in q:
             return httpx.Response(200, json={"status": "success", "data": {"result": [{"metric": {"version": v}, "value": [0, "1"]} for v in versions]}})
-        for needle, val in values.items():
-            if needle in q:
-                if val is None:
-                    return httpx.Response(200, json={"status": "success", "data": {"result": []}})
-                return httpx.Response(200, json={"status": "success", "data": {"result": [{"metric": {}, "value": [0, str(val)]}]}})
+        name = classify(q)
+        candidates = [(name, values[name])] if name in values else []
+        candidates += [(n, v) for n, v in values.items() if n != name and n in q]
+        if candidates and candidates[0][1] is not None:
+            return httpx.Response(200, json={"status": "success", "data": {"result": [{"metric": {}, "value": [0, str(candidates[0][1])]}]}})
         return httpx.Response(200, json={"status": "success", "data": {"result": []}})
 
     return httpx.MockTransport(_handle)
@@ -146,10 +146,49 @@ def loki_transport(lines=None, fail=False):
     return httpx.MockTransport(_handle)
 
 
-HEALTHY_METRICS = {
-    "rate(demo_http_requests_total{status": 0.0, "histogram_quantile": 0.05, "sum(demo_http_active_requests)": 1,
-    "sum(demo_service_healthy)": 1, "count(demo_service_healthy == 0)": 0, "min(up": 1,
-}
+def classify(q: str) -> str:
+    """Map a PromQL string issued by PrometheusClient.service_metrics to a metric name."""
+    if "histogram_quantile" in q:
+        return "p95_latency_seconds"
+    if " / sum(rate(" in q:
+        return "error_ratio"
+    if q.startswith("sum(rate(demo_http_requests_total{status"):
+        return "error_rate_per_s"
+    if q.startswith("sum(rate(demo_http_requests_total"):
+        return "request_rate_per_s"
+    if "active_requests" in q:
+        return "active_requests"
+    if "count(demo_service_healthy == 0)" in q:
+        return "unhealthy_instances"
+    if "sum(demo_service_healthy)" in q:
+        return "healthy_instances"
+    if q.startswith("min(up"):
+        return "up"
+    if "process_resident_memory_bytes" in q:
+        return "memory_bytes"
+    if "process_cpu_seconds_total" in q:
+        return "cpu_cores"
+    return "unknown"
+
+
+GOOD = {"error_ratio": 0.0, "p95_latency_seconds": 0.05, "request_rate_per_s": 5.0, "error_rate_per_s": 0.0, "active_requests": 1,
+        "healthy_instances": 1, "unhealthy_instances": 0, "up": 1, "memory_bytes": 5e7, "cpu_cores": 0.05}
+BAD_ERRORS = {**GOOD, "error_ratio": 0.6, "error_rate_per_s": 3.0}
+BAD_UNHEALTHY = {**GOOD, "unhealthy_instances": 1, "healthy_instances": 0}
+
+
+def scenario_prom(cluster, bad: dict, good: dict = GOOD, versions=("2.0.0",)):
+    """Prometheus double whose answers flip from `bad` to `good` once the fake cluster has been healed."""
+    state = {"cluster": cluster}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        q = request.url.params.get("query", "")
+        if "demo_service_build_info" in q:
+            return httpx.Response(200, json={"status": "success", "data": {"result": [{"metric": {"version": v}, "value": [0, "1"]} for v in versions]}})
+        src = good if state["cluster"].healed else bad
+        return httpx.Response(200, json={"status": "success", "data": {"result": [{"metric": {}, "value": [0, str(src.get(classify(q), 0))]}]}})
+
+    return httpx.MockTransport(handler)
 ERROR_LOGS = [
     '{"timestamp":"t","service":"demo-service","level":"ERROR","message":"Unhandled KeyError \'discount_code\' in order pricing (regression in release 2.0.0)","request_id":"r1","version":"2.0.0","exception":"Traceback..."}',
     '{"timestamp":"t","service":"demo-service","level":"ERROR","message":"GET /api/orders/3 -> 500","request_id":"r2","version":"2.0.0"}',
