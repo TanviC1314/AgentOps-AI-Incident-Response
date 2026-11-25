@@ -64,6 +64,18 @@ def create_app() -> FastAPI:
     )
     install_error_handlers(app)
 
+    from fastapi.responses import JSONResponse
+
+    from app.integrations.http import IntegrationError
+
+    @app.exception_handler(IntegrationError)
+    async def integration_error(_: Request, exc: IntegrationError):
+        status = 404 if exc.code == "not_found" else 503
+        return JSONResponse(status_code=status, content={"error": {
+            "code": "dependency_unavailable", "message": f"{exc.source} unavailable: {exc.message}",
+            "details": exc.as_dict(), "request_id": request_id_var.get(),
+        }})
+
     @app.middleware("http")
     async def request_context(request: Request, call_next):
         rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:16]

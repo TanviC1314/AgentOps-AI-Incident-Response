@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     kubernetes_deployment: str = "demo-service"
     kubeconfig_path: str = ""
     demo_service_name: str = "demo-service"
+    demo_baseline_version: str = "1.0.0"
+    demo_bad_version: str = "2.0.0"
+    simulation_enabled: bool = True
 
     llm_provider: str = "openai"  # openai (any OpenAI-compatible endpoint) | anthropic
     llm_model: str = "gpt-4o-mini"
