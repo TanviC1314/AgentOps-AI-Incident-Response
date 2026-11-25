@@ -1,0 +1,13 @@
+route:
+  receiver: agentops
+  group_by: [alertname, service]
+  group_wait: 5s
+  group_interval: 10s
+  repeat_interval: 1h
+
+receivers:
+  - name: agentops
+    webhook_configs:
+      - url: http://backend:8000/api/v1/alerts/webhook
+        send_resolved: true
+        max_alerts: 20

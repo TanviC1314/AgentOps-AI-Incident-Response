@@ -1,0 +1,45 @@
+groups:
+  - name: demo-service
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(demo_http_requests_total{status=~"5..",path=~"/api/.*"}[1m]))
+            / sum(rate(demo_http_requests_total{path=~"/api/.*"}[1m])) > 0.2
+        for: 30s
+        labels:
+          severity: high
+          service: demo-service
+        annotations:
+          summary: "HTTP 5xx error rate above 20%"
+          description: "More than 20% of demo-service API requests returned 5xx over the last minute (value {{ $value | humanizePercentage }})."
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(demo_http_request_duration_seconds_bucket{path=~"/api/.*"}[1m])) by (le)) > 1
+        for: 30s
+        labels:
+          severity: medium
+          service: demo-service
+        annotations:
+          summary: "p95 latency above 1s"
+          description: "p95 request latency of demo-service is {{ $value | humanizeDuration }} (threshold 1s)."
+
+      - alert: ServiceUnavailable
+        expr: up{job="demo-service"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: demo-service
+        annotations:
+          summary: "demo-service is down"
+          description: "Prometheus cannot scrape demo-service instance {{ $labels.instance }}."
+
+      - alert: UnhealthyInstances
+        expr: demo_service_healthy == 0
+        for: 30s
+        labels:
+          severity: high
+          service: demo-service
+        annotations:
+          summary: "demo-service instance reports unhealthy"
+          description: "Instance {{ $labels.instance }} is failing its health checks."

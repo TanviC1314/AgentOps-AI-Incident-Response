@@ -1,0 +1,3 @@
+[
+  { "targets": ["demo-service:8001"], "labels": { "env": "compose" } }
+]
