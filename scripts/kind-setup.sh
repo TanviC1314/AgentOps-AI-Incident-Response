@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 for t in docker kind kubectl; do command -v "$t" >/dev/null || { echo "'$t' is required"; exit 1; }; done
 
-kind get clusters 2>/dev/null | grep -qx agentops || kind create cluster --config k8s/kind-config.yaml
+kind get clusters 2>/dev/null | grep -qx agentops || kind create cluster --config kind/kind-config.yaml
 CTX=kind-agentops
 
 docker build -t agentops/demo-service:1.0.0 demo-service
