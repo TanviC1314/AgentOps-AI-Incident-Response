@@ -39,8 +39,15 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     worker = None
     if settings.worker_enabled:
+        from app.core.queue import get_queue
+        from app.services.startup import recover_interrupted_work
         from app.workers.worker import start_worker
 
+        try:
+            with session_factory()() as db:
+                recover_interrupted_work(db, get_queue())
+        except Exception:  # never block startup: incident management must stay available
+            logger.exception("could not reconcile interrupted work")
         worker = start_worker()
     yield
     if worker is not None:
