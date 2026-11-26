@@ -7,7 +7,7 @@ validated actions, **verifies** the result against explicit criteria, and record
 
 It is not a chatbot. The LLM never supplies operational facts and never changes workflow state.
 
-> **Status: Phase 1 complete in code; full-stack validation is partial.** Backend (59 tests), demo service (7)
+> **Status: Phase 1 complete in code; full-stack validation is partial.** Backend (70 tests), demo service (7)
 > and frontend (13) tests pass. The Docker Compose + kind end-to-end run has **not** been executed by the author
 > yet (no Docker daemon / kind on the development machine). See [Known limitations](#known-limitations) and
 > [What has and has not been verified](#what-has-and-has-not-been-verified).
@@ -230,20 +230,24 @@ Interactive docs: `http://localhost:8000/docs`. All routes are under `/api/v1`; 
 
 Observability of AgentOps itself: structured JSON logs with request/incident/execution ids, `/metrics`
 (`agentops_incidents_*`, `agentops_investigation_duration_seconds`, `agentops_recovery_duration_seconds`,
-`agentops_tool_calls_total`, …), OpenTelemetry spans around investigations, tools and recoveries, and the Grafana
-dashboard *AgentOps – Service Health & Monitoring*.
+`agentops_tool_calls_total`, `agentops_service_error_rate` — the last one is refreshed from Prometheus on every scrape),
+OpenTelemetry spans around investigations, tools and recoveries, and the Grafana dashboard *AgentOps – Service Health & Monitoring*.
 
 ## Testing
 
 ```powershell
-cd backend;      .\.venv\Scripts\python -m pytest            # 59 tests
+cd backend;      .\.venv\Scripts\python -m pytest            # 70 tests
 cd demo-service; ..\backend\.venv\Scripts\python -m pytest tests   # 7 tests
 cd frontend;     npm test                                    # 13 tests
 ```
 
-Backend tests run the production webhook → DB → state machine → LangGraph agent → validation → recovery → verification
-code with **test doubles for Prometheus/Loki/Kubernetes** (`backend/tests/fakes.py`). They prove the logic, not that a
-real Prometheus fired.
+Backend tests (70) cover the full webhook → DB → state machine → LangGraph agent → validation → recovery → verification
+path with **test doubles for Prometheus/Loki/Kubernetes** (`backend/tests/fakes.py`), plus:
+- Startup reconciliation: interrupted investigations are re-queued; interrupted recoveries fail safely (never re-executed).
+- `/metrics` endpoint: service error rate gauge is set from Prometheus; survives Prometheus being unavailable.
+- Static infra checks: k8s manifests stay in `agentops-demo`, RBAC has no ClusterRole/wildcards/secrets, kind config lives in `kind/`.
+
+They prove the logic, not that a real Prometheus fired.
 
 **Real-stack end-to-end test** (13 steps from simulated failure to audit log; skipped unless enabled):
 
@@ -269,6 +273,7 @@ Overview, Incident detail (timeline + verification), Approvals and Grafana pages
 ## Known limitations
 
 * Full-stack (Compose + kind) validation pending, see above. Exact queries/rule thresholds may need tuning.
+* kind cluster config lives in `kind/kind-config.yaml` (moved out of `k8s/` so `kubectl apply -f k8s/` does not try to apply it as a Kubernetes manifest).
 * No authentication/RBAC in the API or UI (Phase 2); approvers self-identify by name. Run on localhost only.
 * One monitored service/deployment, single replica by default (fault state is per pod).
 * Simulation admin token is a demo default; the demo-service admin API must not be exposed.
