@@ -92,6 +92,29 @@ def test_simulation_triggers_real_faults_and_audits(client):
     assert "simulation.triggered" in actions and "simulation.reset" in actions
 
 
+def test_metrics_endpoint_sets_service_error_rate_gauge(client):
+    from prometheus_client import REGISTRY
+
+    from app.core.metrics import SERVICE_ERROR_RATE
+
+    set_clients(make_clients(prom=prom_transport({"error_ratio": 0.42})))
+    r = client.get("/metrics")
+    assert r.status_code == 200
+    text = r.text
+    assert "agentops_service_error_rate" in text
+    assert pytest.approx(SERVICE_ERROR_RATE._value.get(), rel=1e-3) == 0.42
+
+
+def test_metrics_endpoint_survives_prometheus_unavailable(client):
+    from app.core.metrics import SERVICE_ERROR_RATE
+
+    SERVICE_ERROR_RATE.set(0.0)
+    set_clients(make_clients(prom=prom_transport(fail=True)))
+    r = client.get("/metrics")
+    assert r.status_code == 200  # never 503 from /metrics
+    assert SERVICE_ERROR_RATE._value.get() == 0.0  # unchanged
+
+
 def test_failed_deployment_requires_kubernetes(client):
     set_clients(make_clients(cluster=UnavailableCluster("n", "d", "disabled")))
     assert client.post("/api/v1/simulations/failed_deployment").status_code == 503

@@ -127,6 +127,8 @@ def create_app() -> FastAPI:
     def prometheus_metrics():
         from sqlalchemy import func, select
 
+        from app.integrations.http import IntegrationError
+        from app.integrations.registry import get_clients
         from app.models import Incident
         from app.repositories.incidents import TERMINAL
 
@@ -134,6 +136,15 @@ def create_app() -> FastAPI:
             metrics.INCIDENTS_ACTIVE.set(
                 db.scalar(select(func.count()).select_from(Incident).where(Incident.status.not_in(TERMINAL))) or 0
             )
+        try:
+            ratio = get_clients().prometheus.scalar(
+                'sum(rate(demo_http_requests_total{status=~"5..",path=~"/api/.*"}[1m]))'
+                " / sum(rate(demo_http_requests_total{path=~\"/api/.*\"}[1m]))"
+            )
+            if ratio is not None:
+                metrics.SERVICE_ERROR_RATE.set(ratio)
+        except (IntegrationError, Exception):
+            pass  # Prometheus unavailable: leave gauge at its last known value
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     return app
